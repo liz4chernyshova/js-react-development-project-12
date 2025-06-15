@@ -1,48 +1,64 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import axios from 'axios';
+import createAxios from '../../api/axiosInstance';
 
-export const fetchChannels = createAsyncThunk(
-  'channels/fetchChannels',
-  async (token) => {
-    const response = await axios.get('http://localhost:5001/api/v1/channels', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    return response.data;
-  },
+export const fetchChatData = createAsyncThunk(
+  'channels/fetchChatData',
+  async (token, thunkAPI) => {
+    try {
+      const api = createAxios(token);
+      const [channelsRes, messagesRes] = await Promise.all([
+        api.get('/api/v1/channels'),
+        api.get('/api/v1/messages'),
+      ]);
+      return {
+        channels: channelsRes.data,
+        messages: messagesRes.data,
+        currentChannelId: channelsRes.data[0]?.id || null,
+      };
+    } catch (err) {
+      return thunkAPI.rejectWithValue(err.response?.data || err.message);
+    }
+  }
 );
+
+const initialState = {
+  channels: [],
+  messages: [],
+  currentChannelId: null,
+  status: 'idle',
+  error: null,
+};
 
 const channelsSlice = createSlice({
   name: 'channels',
-  initialState: {
-    channels: [],
-    messages: [],
-    currentChannelId: null,
-    status: 'idle',
-    error: null,
-  },
+  initialState,
   reducers: {
-    // addMessage: (state, action) => {
-    //   state.messages.push(action.payload);
-    // },
+    setCurrentChannelId(state, action) {
+      state.currentChannelId = action.payload;
+    },
+    addMessage(state, action) {
+      state.messages.push(action.payload);
+    },
   },
   extraReducers: (builder) => {
     builder
-      .addCase(fetchChannels.pending, (state) => {
+      .addCase(fetchChatData.pending, (state) => {
         state.status = 'loading';
       })
-      .addCase(fetchChannels.fulfilled, (state, action) => {
+      .addCase(fetchChatData.fulfilled, (state, action) => {
+        const { channels, messages, currentChannelId } = action.payload;
+        state.channels = channels;
+        state.messages = messages;
+        state.currentChannelId = currentChannelId;
         state.status = 'succeeded';
-        state.channels = action.payload.channels;
-        state.messages = action.payload.messages;
-        state.currentChannelId = action.payload.currentChannelId;
+        state.error = null;
       })
-      .addCase(fetchChannels.rejected, (state, action) => {
+      .addCase(fetchChatData.rejected, (state, action) => {
         state.status = 'failed';
-        state.error = action.error.message;
+        state.error = action.payload || 'Ошибка загрузки данных';
       });
   },
 });
 
+export const { setCurrentChannelId, addMessage } = channelsSlice.actions;
 export default channelsSlice.reducer;

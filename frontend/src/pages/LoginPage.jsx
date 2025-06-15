@@ -1,5 +1,5 @@
 import React from 'react';
-import { Formik, Form, Field, ErrorMessage } from 'formik';
+import { Formik, Form, Field } from 'formik';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,7 +11,7 @@ const LoginPage = () => {
   const handleSubmit = async (values, { setSubmitting, setErrors }) => {
     try {
       const response = await axios.post('http://localhost:5001/api/v1/login', values);
-      auth.login(response.data.token);
+      auth.logIn(response.data);
       navigate('/');
     } catch {
       setErrors({ general: 'Неверные имя пользователя или пароль' });
