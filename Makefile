@@ -4,7 +4,7 @@ build:
 start:
 	npx start-server -s ./frontend/dist
 
-start:
+install:
 	npm install && cd frontend && npm install
 
 lint:
