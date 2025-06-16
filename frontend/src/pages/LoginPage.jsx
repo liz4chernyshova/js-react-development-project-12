@@ -1,52 +1,82 @@
-import React from 'react';
-import { Formik, Form, Field } from 'formik';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { useAuth } from '../contexts/AuthContext';
+import { useState } from 'react'
+import { Formik, Form, Field } from 'formik'
+import { useNavigate, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+
+import useAuth from '../hooks/useAuth'
+import { useLoginMutation } from '../api/createApi'
 
 const LoginPage = () => {
-  const navigate = useNavigate();
-  const auth = useAuth();
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const [authError, setAuthError] = useState(null)
+  const { handleLogin } = useAuth()
 
-  const handleSubmit = async (values, { setSubmitting, setErrors }) => {
-    try {
-      const response = await axios.post('http://localhost:5001/api/v1/login', values);
-      auth.logIn(response.data);
-      navigate('/');
-    } catch {
-      setErrors({ general: 'Неверные имя пользователя или пароль' });
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const [login] = useLoginMutation()
 
   return (
-    <div>
-      <h2>Login</h2>
-      <Formik
-        initialValues={{ username: '', password: '' }}
-        onSubmit={handleSubmit}
-      >
-        {({ isSubmitting, errors }) => (
-          <Form>
-            <div>
-              <label htmlFor="username">Username</label>
-              <Field id="username" name="username" />
-            </div>
+    <div className="container-fluid vh-100 d-flex justify-content-center align-items-center">
+      <div className="col-sm-10 col-md-6 col-lg-4">
+        <div className="card p-4 shadow-sm">
+          <h2 className="text-center mb-4">{t('loginForm.loginTitle')}</h2>
+          <Formik
+            initialValues={{ username: '', password: '' }}
+            onSubmit={async (values, { setSubmitting }) => {
+              try {
+                setAuthError(null)
+                const response = await login(values).unwrap()
 
-            <div>
-              <label htmlFor="password">Password</label>
-              <Field id="password" name="password" type="password" />
-            </div>
-
-            {errors.general && <div style={{ color: 'red' }}>{errors.general}</div>}
-
-            <button type="submit" disabled={isSubmitting}>Login</button>
-          </Form>
-        )}
-      </Formik>
+                const { token, username } = response
+                handleLogin(token, username)
+                navigate('/')
+              }
+              catch (err) {
+                if (err?.status === 401) {
+                  setAuthError(t('errors.authError'))
+                }
+                else {
+                  setAuthError(t('toast.networkError'))
+                }
+              }
+              finally {
+                setSubmitting(false)
+              }
+            }}
+          >
+            {({ isSubmitting }) => (
+              <Form>
+                <div className="mb-3">
+                  <label htmlFor="username" className="form-label">
+                    {t('loginForm.username')}
+                  </label>
+                  <Field id="username" name="username" className="form-control" required />
+                </div>
+                <div className="mb-3">
+                  <label htmlFor="password" className="form-label">
+                    {t('loginForm.password')}
+                  </label>
+                  <Field
+                    id="password"
+                    name="password"
+                    type="password"
+                    className="form-control"
+                    required
+                  />
+                </div>
+                {authError && <div className="alert alert-danger">{authError}</div>}
+                <button type="submit" disabled={isSubmitting} className="btn btn-primary w-100 mb-3">
+                  {t('loginForm.button.login')}
+                </button>
+                <div className="text-center">
+                  <Link to="/signup">{t('loginForm.button.signup')}</Link>
+                </div>
+              </Form>
+            )}
+          </Formik>
+        </div>
+      </div>
     </div>
-  );
-};
+  )
+}
 
-export default LoginPage;
+export default LoginPage

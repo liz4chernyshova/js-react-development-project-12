@@ -1,95 +1,89 @@
-import React, { useEffect, useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { fetchChatData, setCurrentChannelId, addMessage } from '../store/slices/channelsSlice';
-import { useAuth } from '../contexts/AuthContext';
-import socket from '../lib/socket';
-import { sendMessage } from '../api/messages';
+import { useEffect, useMemo } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
+import { useTranslation } from 'react-i18next'
+
+import { fetchMessages, selectMessages } from '../slices/messagesSlice'
+import { fetchChannels, selectChannels, selectActiveChannelId } from '../slices/channelsSlice'
+import ModalManager from '../components/modals/ModalManager'
+import ChannelsList from '../components/channels/ChannelsList'
+import MessagesList from '../components/messages/MessagesList'
+import MessageForm from '../components/messages/MessageForm'
+import { openModal } from '../slices/modalSlice'
 
 const ChatPage = () => {
-  const dispatch = useDispatch();
-  const { token, user } = useAuth();
-  const { channels, messages, currentChannelId, status, error } = useSelector((state) => state.channels);
+  const { t } = useTranslation()
+  const dispatch = useDispatch()
+  const { loading: channelsLoading, error: channelsError } = useSelector(state => state.channels)
+  const { loading: messagesLoading, error: messagesError } = useSelector(state => state.messages)
+  const channels = useSelector(selectChannels)
+  const activeChannelId = useSelector(selectActiveChannelId)
+  const messages = useSelector(selectMessages)
 
-  const [messageText, setMessageText] = useState('');
+  const activeChannel = useMemo(
+    () => channels.find(ch => ch.id === activeChannelId),
+    [channels, activeChannelId],
+  )
+
+  const messagesCount = useMemo(
+    () => messages.filter(msg => msg.channelId === activeChannelId).length,
+    [messages, activeChannelId],
+  )
 
   useEffect(() => {
-    if (token) dispatch(fetchChatData(token));
-  }, [dispatch, token]);
+    dispatch(fetchChannels())
+    dispatch(fetchMessages())
+  }, [dispatch])
 
-  useEffect(() => {
-    socket.auth = { token };
-    socket.connect();
-    socket.on('newMessage', (msg) => dispatch(addMessage(msg)));
-    return () => {
-      socket.off('newMessage');
-      socket.disconnect();
-    };
-  }, [dispatch, token]);
+  const handleAddChannel = () => dispatch(openModal({ type: 'addChannel' }))
 
-  const currentMessages = (messages || []).filter((m) => m.channelId === currentChannelId);
-  const currentChannel = channels.find((ch) => ch.id === currentChannelId);
-
-  const handleSend = async () => {
-    if (!messageText.trim()) return;
-    try {
-      await sendMessage({
-        token,
-        body: messageText,
-        channelId: currentChannelId,
-        username: user.username,
-      });
-      setMessageText('');
-    } catch (err) {
-      console.error('Ошибка при отправке сообщения:', err);
-    }
-  };
-
-  if (status === 'loading') return <div>Загрузка...</div>;
-  if (status === 'failed') return <div>Ошибка: {error}</div>;
+  if (channelsLoading || messagesLoading) return <p>{t('inStatus.loadingData')}</p>
+  if (channelsError || messagesError) return null
 
   return (
-    <div style={{ display: 'flex', height: '100vh' }}>
-      <aside style={{ width: '25%', padding: '1rem', borderRight: '1px solid #ccc' }}>
-        <h4>Каналы</h4>
-        <ul style={{ listStyle: 'none', padding: 0 }}>
-          {channels.map((ch) => (
-            <li
-              key={ch.id}
-              style={{
-                cursor: 'pointer',
-                fontWeight: ch.id === currentChannelId ? 'bold' : 'normal',
-              }}
-              onClick={() => dispatch(setCurrentChannelId(ch.id))}
-            >
-              #{ch.name}
-            </li>
-          ))}
-        </ul>
-      </aside>
-
-      <main style={{ flex: 1, padding: '1rem', display: 'flex', flexDirection: 'column' }}>
-        <h4>#{currentChannel?.name}</h4>
-        <div style={{ flexGrow: 1, overflowY: 'auto' }}>
-          {currentMessages.map((msg) => (
-            <div key={msg.id}>
-              <strong>{msg.username}:</strong> {msg.body}
+    <div className="container-fluid bg-secondary-subtle h-100 pt-5">
+      <div className="row h-100 gx-0 justify-content-center">
+        <div className="col-12 col-md-10 col-lg-8 h-100">
+          <div className="card h-100">
+            <div className="row h-100 gx-0">
+              <div className="col-4 d-flex flex-column border-end h-100">
+                <div className="d-flex justify-content-between align-items-center px-3 py-2">
+                  <h5 className="mb-0">{t('chatPage.channels')}</h5>
+                  <button
+                    type="button"
+                    className="btn btn-outline-primary btn-sm"
+                    onClick={handleAddChannel}
+                  >
+                    {t('chatPage.plusSign')}
+                  </button>
+                </div>
+                <div className="flex-grow-1 overflow-auto bg-light px-2">
+                  <ChannelsList />
+                </div>
+              </div>
+              <div className="col-8 d-flex flex-column h-100">
+                <div className="border-bottom bg-light px-3 py-2">
+                  <h5 className="mb-0">
+                    #
+                    {activeChannel?.name}
+                  </h5>
+                  <span className="text-muted small">
+                    {t('chatPage.messagesCount', { count: messagesCount })}
+                  </span>
+                </div>
+                <div className="flex-grow-1 overflow-auto px-3 py-2">
+                  <MessagesList />
+                </div>
+                <div className="border-top px-3 py-2">
+                  <MessageForm />
+                </div>
+              </div>
             </div>
-          ))}
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-          <input
-            type="text"
-            value={messageText}
-            onChange={(e) => setMessageText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Введите сообщение"
-            style={{ flexGrow: 1 }}
-          />
-          <button onClick={handleSend}>Отправить</button>
-        </div>
-      </main>
+      </div>
+      <ModalManager />
     </div>
-  );
-};
+  )
+}
 
-export default ChatPage;
+export default ChatPage
